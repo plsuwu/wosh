@@ -37,6 +37,7 @@ extern crate lazy_static;
 
 lazy_static! {
     static ref DICTIONARY: Vec<String> = load_dictionary().unwrap();
+    static ref UNCOMMON: Vec<char> = vec!['z', 'q', 'j', 'x'];
 }
 
 fn load_dictionary() -> io::Result<Vec<String>> {
@@ -54,7 +55,7 @@ fn filter_words(
     verbosity: u8,
 ) -> Vec<String> {
     let mut letter_counts = HashMap::new();
-    let ignored = ignore.chars().collect::<Vec<char>>();
+    let mut ignored = ignore.chars().collect::<Vec<char>>();
     let mut subs = 0;
 
     for ch in letters.chars() {
@@ -67,6 +68,15 @@ fn filter_words(
         }
     }
 
+    if ignored.iter().any(|c| *c == '0') {
+        UNCOMMON.iter().for_each(|u| {
+            if letters.chars().any(|ch| ch != *u) {
+                ignored.push(*u);
+            }
+        });
+        println!("{:?}", ignored);
+    }
+
     let mut found: Vec<String> = DICTIONARY
         .iter()
         .filter(|&word| {
@@ -74,7 +84,7 @@ fn filter_words(
                 || word.len() > max_len
                 || ignored.iter().any(|c| word.contains(*c))
             {
-                if verbosity > 0 {
+                if verbosity > 2 {
                     let mut filter_reason = "unhandled reason";
 
                     if word.len() < min_len {
@@ -89,6 +99,7 @@ fn filter_words(
 
                     println!("filtered {} ({})", word, filter_reason.to_string());
                 }
+
                 return false;
             }
 
