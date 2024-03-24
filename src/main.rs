@@ -2,7 +2,6 @@ use clap::Parser;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead};
-// use std::path::Path;
 use tokio::runtime::Runtime;
 
 #[derive(Parser, Debug)]
@@ -13,15 +12,24 @@ use tokio::runtime::Runtime;
 Suggests words to guess for Words on Stream."
 )]
 struct Args {
-    #[arg( short, help = "(a-zA-Z.)+ to indicate available letters - converts to lowercase.
-    - NOTE: a period ('.') can be used to indicate hidden letters (very messy).")]
+    #[arg(
+        short,
+        help = "(a-zA-Z.)+ to indicate available letters - converts to lowercase.
+    - NOTE: a period ('.') can be used to indicate hidden letters (very messy)."
+    )]
     letters: String,
 
-    #[arg( short, default_value_t = 4)]
+    #[arg(short, default_value_t = 4)]
     min_length: usize,
 
-    #[arg( short = 'M', default_value_t = 255)]
+    #[arg(short = 'M', default_value_t = 255)]
     max_length: usize,
+
+    #[arg(short, default_value = "_")]
+    ignore: String,
+
+    #[arg(short, default_value_t = 0)]
+    verbosity: u8,
 }
 
 #[macro_use]
@@ -38,8 +46,15 @@ fn load_dictionary() -> io::Result<Vec<String>> {
     return buf.lines().collect();
 }
 
-fn filter_words(letters: &str, min_len: usize, max_len: usize) -> Vec<String> {
+fn filter_words(
+    letters: &str,
+    min_len: usize,
+    max_len: usize,
+    ignore: &str,
+    verbosity: u8,
+) -> Vec<String> {
     let mut letter_counts = HashMap::new();
+    let ignored = ignore.chars().collect::<Vec<char>>();
     let mut subs = 0;
 
     for ch in letters.chars() {
@@ -55,8 +70,25 @@ fn filter_words(letters: &str, min_len: usize, max_len: usize) -> Vec<String> {
     let mut found: Vec<String> = DICTIONARY
         .iter()
         .filter(|&word| {
-            if word.len() < min_len || word.len() > max_len {
-                println!("filtered {}", word);
+            if word.len() < min_len
+                || word.len() > max_len
+                || ignored.iter().any(|c| word.contains(*c))
+            {
+                if verbosity > 0 {
+                    let mut filter_reason = "unhandled reason";
+
+                    if word.len() < min_len {
+                        filter_reason = "too short";
+                    }
+                    if word.len() > max_len {
+                        filter_reason = "too long";
+                    }
+                    if ignored.iter().any(|c| word.contains(*c)) {
+                        filter_reason = "contains an ignored character";
+                    }
+
+                    println!("filtered {} ({})", word, filter_reason.to_string());
+                }
                 return false;
             }
 
@@ -93,7 +125,13 @@ fn main() {
 
     let runtime = Runtime::new().unwrap();
     runtime.block_on(async {
-        let filtered_words = filter_words(&args.letters, args.min_length, args.max_length);
+        let filtered_words = filter_words(
+            &args.letters,
+            args.min_length,
+            args.max_length,
+            &args.ignore,
+            args.verbosity,
+        );
         println!("\nFound {} words:", filtered_words.len());
         for (i, word) in filtered_words.iter().enumerate() {
             println!("  [{:#?}]:   {:#?}", i, word);

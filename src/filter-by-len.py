@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 
-# quick script to remove words that are too short.
-# unsure what the largest words on stream word option is so
-#   im just ignoring it.
+# quick script to remove words that dont meet the 10-minute
+# requirement. unsure what the largest words on stream words
+# are so im just ignoring it.
+
 
 def trim_list(words: list[str]) -> list[str]:
     trimmed_list: list[str] = []
@@ -15,7 +16,7 @@ def trim_list(words: list[str]) -> list[str]:
 
 
 def main():
-    with open("./wordlist.10000", "r") as words, open(
+    with open("words_alpha.txt", "r") as words, open(
         "./wordlist_processed", "w"
     ) as trim:
         w = trim_list(words.read().split("\n"))
