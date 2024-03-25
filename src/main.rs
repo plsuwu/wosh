@@ -68,6 +68,8 @@ fn filter_words(
         }
     }
 
+    // uncommon letters group filter -> `-i zqjx` condensed to `-i 0`.
+    // can be chained with other letters, but won't overwrite letters passed with `-l` (this is intended).
     if ignored.iter().any(|c| *c == '0') {
         UNCOMMON.iter().for_each(|u| {
             if letters.chars().any(|ch| ch != *u) {
