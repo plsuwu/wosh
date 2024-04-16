@@ -25,7 +25,7 @@ struct Arguments {
     #[arg(short, long)]
     letters: String,
 
-    #[arg(short, long, default_value = "./wos-sorted.csv")]
+    #[arg(short, long, default_value = "/home/please/Documents/Repositories/plsuwu/wosh/wos-sorted.csv")]
     wordlist: String,
 
     #[arg(short = 'H', long, default_value_t = false)]
