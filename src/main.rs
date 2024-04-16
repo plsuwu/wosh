@@ -1,61 +1,57 @@
 use clap::Parser;
+use csv::{ReaderBuilder, Trim};
+use serde::Deserialize;
 use std::collections::HashMap;
+use std::error::Error;
 use std::fs::File;
-use std::io::{self, BufRead};
-use tokio::runtime::Runtime;
+
+#[derive(Debug, Deserialize, Clone)]
+struct Record {
+    letters: String,
+    longest: String,
+    wordlen: u32,
+    #[serde(rename(deserialize = "wordlist"))]
+    words: Vec<String>,
+}
 
 #[derive(Parser, Debug)]
-#[command(
-    version,
-    about,
-    long_about = "
-Suggests words to guess for Words on Stream."
-)]
-struct Args {
-    #[arg(
-        short,
-        help = "(a-zA-Z.)+ to indicate available letters - converts to lowercase.
-    - NOTE: a period ('.') can be used to indicate hidden letters (very messy)."
-    )]
+#[command(version, about)]
+struct Arguments {
+    #[arg(short, long)]
     letters: String,
 
-    #[arg(short, default_value_t = 4)]
+    #[arg(short, long, default_value = "./wos-sorted.csv")]
+    wordlist: String,
+
+    #[arg(short = 'H', long, default_value_t = false)]
+    contains_hidden: bool,
+
+    #[arg(short, long, default_value_t = 4)]
     min_length: usize,
 
-    #[arg(short = 'M', default_value_t = 255)]
-    max_length: usize,
-
-    #[arg(short, default_value = "_")]
+    #[arg(short, long, default_value = "_")]
     ignore: String,
-
-    #[arg(short, default_value_t = 0)]
-    verbosity: u8,
 }
 
-#[macro_use]
-extern crate lazy_static;
-
-lazy_static! {
-    static ref DICTIONARY: Vec<String> = load_dictionary().unwrap();
-    static ref UNCOMMON: Vec<char> = vec!['z', 'q', 'j', 'x'];
-}
-
-fn load_dictionary() -> io::Result<Vec<String>> {
-    let path = "./wordlist_processed";
+fn read_wordlist(path: &str) -> Result<Vec<Record>, Box<dyn Error>> {
     let file = File::open(path)?;
-    let buf = io::BufReader::new(file);
-    return buf.lines().collect();
+    let mut rdr = ReaderBuilder::new()
+        .has_headers(true)
+        .trim(Trim::All)
+        .flexible(true)
+        .from_reader(file);
+    let mut wordlists = vec![];
+
+    for res in rdr.deserialize() {
+        let wordlist: Record = res?;
+        wordlists.push(wordlist);
+    }
+
+    return Ok(wordlists);
 }
 
-fn filter_words(
-    letters: &str,
-    min_len: usize,
-    max_len: usize,
-    ignore: &str,
-    verbosity: u8,
-) -> Vec<String> {
+fn filtered(letters: &str, _ignored: &str, hidden: bool, wordlist: Vec<Record>) -> Vec<Record> {
     let mut letter_counts = HashMap::new();
-    let mut ignored = ignore.chars().collect::<Vec<char>>();
     let mut subs = 0;
 
     for ch in letters.chars() {
@@ -68,47 +64,21 @@ fn filter_words(
         }
     }
 
-    // uncommon letters group filter -> `-i zqjx` condensed to `-i 0`.
-    // can be chained with other letters, but won't overwrite letters passed with `-l` (this is intended).
-    if ignored.iter().any(|c| *c == '0') {
-        UNCOMMON.iter().for_each(|u| {
-            if letters.chars().any(|ch| ch != *u) {
-                ignored.push(*u);
+    let found: Vec<Record> = wordlist
+        .into_iter()
+        .filter(|rec| {
+            if !hidden && letters.len() != rec.wordlen as usize {
+                return false;
             }
-        });
-        println!("{:?}", ignored);
-    }
 
-    let mut found: Vec<String> = DICTIONARY
-        .iter()
-        .filter(|&word| {
-            if word.len() < min_len
-                || word.len() > max_len
-                || ignored.iter().any(|c| word.contains(*c))
-            {
-                if verbosity > 2 {
-                    let mut filter_reason = "unhandled reason";
-
-                    if word.len() < min_len {
-                        filter_reason = "too short";
-                    }
-                    if word.len() > max_len {
-                        filter_reason = "too long";
-                    }
-                    if ignored.iter().any(|c| word.contains(*c)) {
-                        filter_reason = "contains an ignored character";
-                    }
-
-                    println!("filtered {} ({})", word, filter_reason.to_string());
-                }
-
+            if letters.len() < rec.wordlen as usize {
                 return false;
             }
 
             let mut counts = letter_counts.clone();
-            let mut subs_left = subs;
+            let mut remaining_subs = subs;
 
-            word.chars().all(|ch| {
+            rec.letters.chars().all(|ch| {
                 let ch = ch.to_lowercase().next().unwrap();
                 match counts.get_mut(&ch) {
                     Some(count) if *count > 0 => {
@@ -116,38 +86,45 @@ fn filter_words(
                         return true;
                     }
                     _ => {
-                        if subs_left > 0 {
-                            subs_left -= 1;
+                        if remaining_subs > 0 {
+                            remaining_subs -= 1;
                             return true;
                         } else {
-                            false
+                            return false;
                         }
                     }
                 }
             })
         })
-        .cloned()
         .collect();
 
-    found.sort_by(|a, b| b.len().cmp(&a.len()));
     return found;
 }
 
 fn main() {
-    let args = Args::parse();
+    let args = Arguments::parse();
+    if !&args.contains_hidden {
+        println!("\n\n--------------\n[NOTE]: Hidden letters are UNSET (set with `-H`).\nLetters to be compared against wordlist as final known set.\n--------------\n");
+    }
 
-    let runtime = Runtime::new().unwrap();
-    runtime.block_on(async {
-        let filtered_words = filter_words(
-            &args.letters,
-            args.min_length,
-            args.max_length,
-            &args.ignore,
-            args.verbosity,
-        );
-        println!("\nFound {} words:", filtered_words.len());
-        for (i, word) in filtered_words.iter().enumerate() {
-            println!("  [{:#?}]:   {:#?}", i, word);
-        }
-    })
+    let wordlist = read_wordlist(&args.wordlist).unwrap();
+    let filtered_wl = filtered(&args.letters, &args.ignore, args.contains_hidden, wordlist);
+
+    let _: Vec<_> = filtered_wl
+        .iter()
+        .clone()
+        .map(|rec| {
+            println!("\nFOR LONGEST WORD: {}\n", rec.longest);
+            let mut words: Vec<&str> = rec.words.iter().map(|s| &**s).collect();
+            let words = words
+                .iter_mut()
+                .map(|s| s.split_whitespace().collect::<Vec<_>>())
+                .collect::<Vec<_>>();
+            for (i, w) in words[0].iter().enumerate() {
+                println!("{}: {}", i, w);
+            }
+        })
+        .collect();
+
+    // println!("{:?}, {:?}, {:#?}", args.letters, longest_word, wordset);
 }

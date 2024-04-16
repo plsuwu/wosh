@@ -1,28 +1,40 @@
 #!/usr/bin/env python
 
-# quick script to remove words that dont meet the 10-minute
-# requirement. unsure what the largest words on stream words
-# are so im just ignoring it.
+# with open('wos-letters-only.csv', 'r') as wor:
+#     with open('wos-wordlist-only.csv', 'r') as let:
+#         with open('wos-combined.csv', 'w') as combined:
+#             letlines = let.readlines()
+#             worlines = wor.readlines()
+#
+#             for i in range(len(letlines)):
+#                 line = worlines[i].strip() + letlines[i]
+#                 combined.write(line)
+
+with open('wos-combined.csv', 'r') as r:
+    with open('wos-sorted.csv', 'w') as w:
+        first_word = r.readlines()
+
+        all = []
+
+        for line in first_word:
+            letters = line.strip().split(",")[0]
+            row = line.strip().rsplit(",")
+            row.remove("".join(letters))
+            list_letters = ([*letters])
+            list_letters.sort()
+            reletter = "".join(list_letters)
+
+            row.insert(0, reletter)
+            rerow = ",".join(row)
+            # print(rerow)
+            all.append(rerow)
 
 
-def trim_list(words: list[str]) -> list[str]:
-    trimmed_list: list[str] = []
-    for word in words:
-        word_length = len([c for c in word])
-        if word != "" and word_length > 3:
-            trimmed_list.append(word)
+        all.sort()
+        # print(all)
+        #
+        for line in all:
+            writeme = line + '\n'
+            w.writelines(writeme)
+            # print(line)
 
-    return trimmed_list
-
-
-def main():
-    with open("words_alpha.txt", "r") as words, open(
-        "./wordlist_processed", "w"
-    ) as trim:
-        w = trim_list(words.read().split("\n"))
-        print(f"new wordlist length: {len(w)}")
-        trim.writelines("\n".join(w))
-
-
-if __name__ == "__main__":
-    main()
