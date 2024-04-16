@@ -4,12 +4,17 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
+use std::sync::Arc;
+use tokio::runtime::Runtime;
+use tokio::task::spawn_blocking;
 
 #[derive(Debug, Deserialize, Clone)]
 struct Record {
-    letters: String,
-    longest: String,
+    // wordlen,longest,letters,spaces,wordlist
     wordlen: u32,
+    longest: String,
+    letters: String,
+    spaces: u32,
     #[serde(rename(deserialize = "wordlist"))]
     words: Vec<String>,
 }
@@ -25,6 +30,9 @@ struct Arguments {
 
     #[arg(short = 'H', long, default_value_t = false)]
     contains_hidden: bool,
+
+    #[arg(short, long, default_value_t = 55)]
+    spaces: usize,
 
     #[arg(short, long, default_value_t = 4)]
     min_length: usize,
@@ -50,7 +58,13 @@ fn read_wordlist(path: &str) -> Result<Vec<Record>, Box<dyn Error>> {
     return Ok(wordlists);
 }
 
-fn filtered(letters: &str, _ignored: &str, hidden: bool, wordlist: Vec<Record>) -> Vec<Record> {
+fn filtered(
+    letters: &str,
+    _ignored: &str,
+    hidden: bool,
+    board_size: usize,
+    wordlist: Vec<Record>,
+) -> Vec<Record> {
     let mut letter_counts = HashMap::new();
     let mut subs = 0;
 
@@ -67,11 +81,11 @@ fn filtered(letters: &str, _ignored: &str, hidden: bool, wordlist: Vec<Record>) 
     let found: Vec<Record> = wordlist
         .into_iter()
         .filter(|rec| {
-            if !hidden && letters.len() != rec.wordlen as usize {
+            if !hidden && letters.len() + subs <= rec.wordlen as usize {
                 return false;
             }
 
-            if letters.len() < rec.wordlen as usize {
+            if board_size < rec.spaces as usize {
                 return false;
             }
 
@@ -104,27 +118,72 @@ fn filtered(letters: &str, _ignored: &str, hidden: bool, wordlist: Vec<Record>) 
 fn main() {
     let args = Arguments::parse();
     if !&args.contains_hidden {
-        println!("\n\n--------------\n[NOTE]: Hidden letters are UNSET (set with `-H`).\nLetters to be compared against wordlist as final known set.\n--------------\n");
+        println!(
+            "\n
+            --------------
+            [NOTE]: Hidden letters are UNSET (set with `-H`).
+            Letters to be compared against wordlist as final known set.
+            --------------
+            \n"
+        );
     }
 
-    let wordlist = read_wordlist(&args.wordlist).unwrap();
-    let filtered_wl = filtered(&args.letters, &args.ignore, args.contains_hidden, wordlist);
+    // im not actually sure this runs concurrently :(
+    let wordlist = Arc::new(read_wordlist(&args.wordlist).unwrap());
+    let runtime = Runtime::new().unwrap();
 
-    let _: Vec<_> = filtered_wl
-        .iter()
-        .clone()
-        .map(|rec| {
-            println!("\nFOR LONGEST WORD: {}\n", rec.longest);
-            let mut words: Vec<&str> = rec.words.iter().map(|s| &**s).collect();
-            let words = words
-                .iter_mut()
-                .map(|s| s.split_whitespace().collect::<Vec<_>>())
-                .collect::<Vec<_>>();
-            for (i, w) in words[0].iter().enumerate() {
-                println!("{}: {}", i, w);
-            }
-        })
-        .collect();
+    runtime.block_on(async move {
+        spawn_blocking(move || {
+            let args_letters = args.letters.clone();
+            let args_ignore = args.ignore.clone();
+            let args_hidden = args.contains_hidden.clone();
+            let args_spaces = args.spaces.clone();
 
-    // println!("{:?}, {:?}, {:#?}", args.letters, longest_word, wordset);
+            let filtered_wl = filtered(
+                &args_letters.to_owned(),
+                &args_ignore.to_owned(),
+                args_hidden,
+                args_spaces,
+                wordlist.to_vec(),
+            );
+
+            let _: Vec<_> = filtered_wl
+                .iter()
+                .map(|rec| {
+                    println!("");
+                    let substituted = rec
+                        .letters
+                        .chars()
+                        .filter(|c| !args_letters.contains(*c))
+                        .map(|c| c.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    let fake_letter = args_letters
+                        .chars()
+                        .filter(|c| !rec.letters.contains(*c) && *c != '.')
+                        .map(|c| c.to_string())
+                        .collect::<Vec<_>>()
+                        .join(",");
+
+                    if !substituted.is_empty() {
+                        println!("substituted '?' for '{}'", substituted);
+                    }
+
+                    if !fake_letter.is_empty() {
+                        println!("fake(s) for this board: '{}'", fake_letter);
+                    }
+                    println!("board's longest word: '{}'", rec.longest);
+                    let mut words: Vec<&str> = rec.words.iter().map(|s| &**s).collect();
+                    let words = words
+                        .iter_mut()
+                        .map(|s| s.split_whitespace().collect::<Vec<_>>())
+                        .collect::<Vec<_>>();
+
+                    for (i, w) in words[0].iter().rev().enumerate() {
+                        println!("{}: {}", i, w);
+                    }
+                })
+                .collect();
+        });
+    });
 }

@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 
-# with open('wos-letters-only.csv', 'r') as wor:
-#     with open('wos-wordlist-only.csv', 'r') as let:
-#         with open('wos-combined.csv', 'w') as combined:
-#             letlines = let.readlines()
-#             worlines = wor.readlines()
-#
-#             for i in range(len(letlines)):
-#                 line = worlines[i].strip() + letlines[i]
-#                 combined.write(line)
+with open('wos-boardlist-no-wl.csv', 'r') as wor:
+    with open('wos-boardlist-only-wl.csv', 'r') as let:
+        with open('wos-combined.csv', 'w') as combined:
+            letlines = let.readlines()
+            worlines = wor.readlines()
+
+            for i in range(len(letlines)):
+                line = worlines[i].strip() + letlines[i]
+                combined.write(line)
 
 with open('wos-combined.csv', 'r') as r:
     with open('wos-sorted.csv', 'w') as w:
