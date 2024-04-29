@@ -5,8 +5,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 use std::sync::Arc;
-use tokio::runtime::Runtime;
-use tokio::task::spawn_blocking;
+use tokio::task;
 
 #[derive(Debug, Deserialize, Clone)]
 struct Record {
@@ -25,11 +24,12 @@ struct Arguments {
     #[arg(short, long)]
     letters: String,
 
-    #[arg(short, long, default_value = "/home/please/Documents/Repositories/plsuwu/wosh/wos-sorted.csv")]
+    #[arg(
+        short,
+        long,
+        default_value = "/home/please/Documents/Repositories/plsuwu/wosh/wos-sorted.csv"
+    )]
     wordlist: String,
-
-    #[arg(short = 'H', long, default_value_t = false)]
-    contains_hidden: bool,
 
     #[arg(short, long, default_value_t = 55)]
     spaces: usize,
@@ -37,7 +37,7 @@ struct Arguments {
     #[arg(short, long, default_value_t = 4)]
     min_length: usize,
 
-    #[arg(short, long, default_value = "_")]
+    #[arg(short = 'n', long, default_value = "_")]
     ignore: String,
 }
 
@@ -58,13 +58,7 @@ fn read_wordlist(path: &str) -> Result<Vec<Record>, Box<dyn Error>> {
     return Ok(wordlists);
 }
 
-fn filtered(
-    letters: &str,
-    _ignored: &str,
-    hidden: bool,
-    board_size: usize,
-    wordlist: Vec<Record>,
-) -> Vec<Record> {
+fn filtered(letters: &str, ignored: &str, board_size: usize, wordlist: Vec<Record>) -> Vec<Record> {
     let mut letter_counts = HashMap::new();
     let mut subs = 0;
 
@@ -81,11 +75,10 @@ fn filtered(
     let found: Vec<Record> = wordlist
         .into_iter()
         .filter(|rec| {
-            if !hidden && letters.len() + subs <= rec.wordlen as usize {
+            if board_size < rec.spaces as usize {
                 return false;
             }
-
-            if board_size < rec.spaces as usize {
+            if rec.letters.contains(ignored) {
                 return false;
             }
 
@@ -115,75 +108,65 @@ fn filtered(
     return found;
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let args = Arguments::parse();
-    if !&args.contains_hidden {
-        println!(
-            "\n
-            --------------
-            [NOTE]: Hidden letters are UNSET (set with `-H`).
-            Letters to be compared against wordlist as final known set.
-            --------------
-            \n"
-        );
+    let wordlist = Arc::new(read_wordlist(&args.wordlist).unwrap());
+    let chunk_size = 25;
+    let chunks = wordlist.chunks(chunk_size);
+
+    let futures = chunks.map(|chunk| {
+        let wordlist_chunk = chunk.to_vec();
+        let args_letters = args.letters.clone();
+        let args_ignore = args.ignore.clone();
+        let args_spaces = args.spaces;
+
+        task::spawn_blocking(move || {
+            filtered(&args_letters, &args_ignore, args_spaces, wordlist_chunk)
+        })
+    });
+
+    let results = futures::future::join_all(futures).await;
+
+    for res in results {
+        let filtered_words = res.unwrap();
+        for rec in filtered_words {
+            let subs = rec
+                .letters
+                .chars()
+                .filter(|c| !args.letters.contains(*c))
+                .map(|c| c.to_string())
+                .collect::<Vec<_>>();
+
+            let fake = args
+                .letters
+                .chars()
+                .filter(|c| !rec.letters.contains(*c) && *c != '.')
+                .map(|c| c.to_string())
+                .collect::<Vec<_>>();
+
+            println!("");
+            if !subs.is_empty() {
+                println!("substituted '?' for '{}'", subs.join(", "));
+            }
+
+            if !fake.is_empty() {
+                println!("fake(s) for potential board: '{}'", fake.join(", "));
+            }
+            println!("board's longest word: '{}'", rec.longest);
+            let mut words: Vec<&str> = rec.words.iter().map(|s| &**s).collect();
+            let words = words
+                .iter_mut()
+                .map(|s| s.split_whitespace().collect::<Vec<_>>())
+                .collect::<Vec<_>>();
+
+            for (i, w) in words[0].iter().rev().enumerate() {
+                println!("{}: {}", i, w);
+            }
+        }
     }
 
-    // im not actually sure this runs concurrently :(
-    let wordlist = Arc::new(read_wordlist(&args.wordlist).unwrap());
-    let runtime = Runtime::new().unwrap();
-
-    runtime.block_on(async move {
-        spawn_blocking(move || {
-            let args_letters = args.letters.clone();
-            let args_ignore = args.ignore.clone();
-            let args_hidden = args.contains_hidden.clone();
-            let args_spaces = args.spaces.clone();
-
-            let filtered_wl = filtered(
-                &args_letters.to_owned(),
-                &args_ignore.to_owned(),
-                args_hidden,
-                args_spaces,
-                wordlist.to_vec(),
-            );
-
-            let _: Vec<_> = filtered_wl
-                .iter()
-                .map(|rec| {
-                    println!("");
-                    let substituted = rec
-                        .letters
-                        .chars()
-                        .filter(|c| !args_letters.contains(*c))
-                        .map(|c| c.to_string())
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    let fake_letter = args_letters
-                        .chars()
-                        .filter(|c| !rec.letters.contains(*c) && *c != '.')
-                        .map(|c| c.to_string())
-                        .collect::<Vec<_>>()
-                        .join(",");
-
-                    if !substituted.is_empty() {
-                        println!("substituted '?' for '{}'", substituted);
-                    }
-
-                    if !fake_letter.is_empty() {
-                        println!("fake(s) for this board: '{}'", fake_letter);
-                    }
-                    println!("board's longest word: '{}'", rec.longest);
-                    let mut words: Vec<&str> = rec.words.iter().map(|s| &**s).collect();
-                    let words = words
-                        .iter_mut()
-                        .map(|s| s.split_whitespace().collect::<Vec<_>>())
-                        .collect::<Vec<_>>();
-
-                    for (i, w) in words[0].iter().rev().enumerate() {
-                        println!("{}: {}", i, w);
-                    }
-                })
-                .collect();
-        });
-    });
+    if !args.ignore.contains("_") {
+        println!("\n[--ignore]: this run ignored '{}'.", args.ignore);
+    }
 }
