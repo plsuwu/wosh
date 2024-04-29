@@ -2,7 +2,7 @@
 
 > i cosplay as someone intelligent
 
-hardcoded to work with my system.
+
 
 **usage**
 
@@ -19,11 +19,13 @@ pretty simplistic compared to some previous iterations.
 - use `-H` to indicate the letters passed in `--letters`/`-l` contains fake letter(s) (i think this is also required when passing a hidden letter).
 - if there are too many results, use `-i` to filter out unwanted substitution letters, or `-s` to indicate the total number of words a board has space for
 
+> default wordlist path is hardcoded for a path in my home directory
+
 ```bash
 $ wosh [-H] -l abc.... [ -s | -w </path/to/wordlist.csv> | -i zxyj ]
 ```
 
-- built on `clap` so pass `--help` to view a list of commands (a handful of these aren't implemented lmao;l)
+- built on `clap` so pass `--help` to view a list of commands (a handful of these options aren't implemented lmao;l)
 
 ```bash
 $ wosh --help
