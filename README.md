@@ -1,44 +1,128 @@
-# words on stream 'helper'
+# Words on Stream "Helper"
 
-> i cosplay as someone intelligent
+> because i am a litarate
 
+## installation
 
-
-**usage**
-
-let rust find the wordlist `.csv` (either with `-w` or change in `main.rs`). install to `PATH` with cargo
+building from source is easiest with [rustup](https://rustup.rs/); it should just be a matter of cloning the repo
+and running `cargo install` to dump a binary into your `PATH`:
 
 ```bash
-$ cargo install --path .
+# on linux (though should be cross-platform) (i haven't tested on windows)
+git clone https://github.com/plsuwu/wosh
+cd wosh
+cargo install --path .
 ```
 
-pretty simplistic compared to some previous iterations. 
+## usage
 
-- `--letters`/`-l` to pass a set of letters to match against the wordlist,
-- pass a period - `-l .` - to indicate a hidden letter,
-- use `-H` to indicate the letters passed in `--letters`/`-l` contains fake letter(s) (i think this is also required when passing a hidden letter).
-- if there are too many results, use `-i` to filter out unwanted substitution letters, or `-s` to indicate the total number of words a board has space for
+> note: output intended to be read bottom-to-top.
 
-> default wordlist path is hardcoded for a path in my home directory
+the idea is that this is as quick and easy as possible to run; generally, you will only want to use the `-l`/`--letters` arg:
 
 ```bash
-$ wosh [-H] -l abc.... [ -s | -w </path/to/wordlist.csv> | -i zxyj ]
+# pass letters with `-l`/`--letters` - any `[?]` on the board are replaced with `.`:
+[please@ruby]:[~] $ wosh -l hanla.ldz
+[ RESULT 1 OF 2 ]:
+
+=> [h]: 'e'         # [t] => hidden letter(s) on this board; indicates replacements for '[?]' letters
+=> [x]: 'z'         # [x] => fake letter(s); the resolved board was otherwise valid without these letters
+=> [^]: 'handle'    # [^] => longest word; the resolved board's longest word
+
+[00]: handle
+[01]: laden
+[02]: haled
+[03]: eland
+
+# ...
+
+[ RESULT 2 OF 2 ]:
+
+=> [h]: 'b'
+=> [x]: 'z'
+=> [^]: 'handball'
+
+# the main wordlist isn't a complete dataset; any time a `???...` is found instead of a word,
+# the letters and word length are cross-referenced from a substitution list to suggest possible
+# words:
+
+[00]: handball
+[01]: ballad
+[02]: banal
+[03]: ????? =>
+     [
+      [00 | aband ],
+      [01 | abdal ],
+      [02 | aland ],
+      [03 | alban ],
+# ...
 ```
 
-- built on `clap` so pass `--help` to view a list of commands (a handful of these options aren't implemented lmao;l)
+- built on `clap` so `--help` can be passed to view a list of available commands
 
 ```bash
-$ wosh --help
+[please@ruby]:[~] $ wosh --help
 Usage: wosh [OPTIONS] --letters <LETTERS>
 
 Options:
   -l, --letters <LETTERS>
-  -w, --wordlist <WORDLIST>      [default: /home/please/Documents/Repositories/plsuwu/wosh/wos-sorted.csv]
-  -H, --contains-hidden
-  -s, --spaces <SPACES>          [default: 55]
-  -m, --min-length <MIN_LENGTH>  [default: 4]     # no longer implemented, does nothing.
-  -i, --ignore <IGNORE>          [default: _]
-  -h, --help                     Print help
-  -V, --version                  Print version
+  -I, --interactive                         # not currently implemented
+  -i, --ignore <IGNORE>      [default: _]
+      --spaces <SPACES>      [default: 0]   # not fully implemented
+  -w, --wordlist <WORDLIST>                 # defaults to '~/.local/share/wosh/wordlist'; asks to download if not present.
+  -s, --sublist <SUBLIST>                   # defaults to '~/.local/share/wosh/sublist'; asks to download if not present.
+  -t, --threads <THREADS>    split the wordlist into specified number of chunks to be processed in their own threads. [default: 15]
+  -h, --help                 Print help
+  -V, --version              Print version
+```
+
+### initial run
+
+if no wordlist/sublist path is passed as an argument and cannot be found in the default location, `wosh` will prompt to download
+when the files are not found but required by the program:
+
+```bash
+[please@ruby]:[~] $ wosh -l asdf...
+
+[ERR]: Unable to find required wordlists (default wordlists expected in directory '/home/please/.local/share/wosh').
+[ERR]: I can download this automatically from url
+       => 'https://raw.githubusercontent.com/plsuwu/wosh/master/wordlist'
+[ERR]: Continue? [Y/n]:
+y
+   => Writing to file (path: '/home/please/.local/share/wosh/wordlist'):
+      .
+   => Fetch ok, returning.
+[ RESULT 1 OF 15 ]:
+
+=> [h]: 'c, e, r'
+=> [x]: 'd, f'
+=> [^]: 'acres'
+
+[00]: scare
+# ...
+```
+
+> this also goes for the sublist:
+
+```bash
+# ...
+[ RESULT 2 OF 15 ]:
+
+=> [h]: 'b, e, r'
+=> [x]: 's, f'
+=> [^]: 'bread'
+
+[ERR]: Unable to find required sublists (default wordlists expected in directory '/home/please/.local/share/wosh').
+[ERR]: I can download this automatically from url
+       => 'https://raw.githubusercontent.com/plsuwu/wosh/master/sublist'
+[ERR]: Continue? [Y/n]:
+y
+[00]: ?????    => Writing to file (path: '/home/please/.local/share/wosh/sublist'):
+       .
+    => Fetch ok, returning.
+=>
+    [
+      [00 | ardeb ],
+# ...
 ```
 
