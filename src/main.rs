@@ -18,8 +18,8 @@ mod fetch_wordlist;
 lazy_static!(
     #[derive(Debug)]
     pub static ref DATA_LOCAL: PathBuf = Path::new(&dirs::data_local_dir().unwrap()).to_path_buf();
-    pub static ref WORDLIST_DEFAULT: PathBuf = Path::new(&DATA_LOCAL.join("wosh/wos-wordlist.csv")).to_path_buf();
-    pub static ref SUBLIST_DEFAULT: PathBuf = Path::new(&DATA_LOCAL.join("wosh/sublist_cropped")).to_path_buf();
+    pub static ref WORDLIST_DEFAULT: PathBuf = Path::new(&DATA_LOCAL.join("wosh/wordlist")).to_path_buf();
+    pub static ref SUBLIST_DEFAULT: PathBuf = Path::new(&DATA_LOCAL.join("wosh/sublist")).to_path_buf();
     pub static ref WORDLIST_URL_GIT: String = "https://raw.githubusercontent.com/plsuwu/wosh/master/wordlist".to_owned();
     pub static ref SUBLIST_URL_GIT: String = "https://raw.githubusercontent.com/plsuwu/wosh/master/sublist".to_owned();
 );
@@ -180,7 +180,8 @@ fn filtered(
             })
         })
         .cloned()
-        .collect::<Vec<_>>(); // idk how to avoid cloning with some insane lifetime shit
+        .collect::<Vec<_>>(); // idk how to avoid cloning with some insane lifetime wrangling so we
+                              // just clone for my sanity
 
     return found;
 }
@@ -231,6 +232,8 @@ async fn process(
     ignore: &str,
     spaces: usize,
 ) {
+
+    println!("\n[-----------------------------]\n");
     let wordlist = Arc::new(read_wordlist(list_path).await.unwrap());
     let chunks = wordlist
         .chunks(chunk_size)
@@ -270,16 +273,6 @@ async fn process(
             .map(|c| c.to_string())
             .collect::<Vec<_>>();
 
-        println!("[ RESULT {} OF {} ]:\n", i + 1, &results.len());
-
-        if !subs.is_empty() {
-            println!("=> [t]: '{}'", subs.join(", "));
-        }
-
-        if !fake.is_empty() {
-            println!("=> [x]: '{}'", fake.join(", "));
-        }
-        println!("=> [^]: '{}'\n", rec.longest);
         let mut words: Vec<&str> = rec.words.iter().map(|s| &**s).collect();
         let words = words
             .iter_mut()
@@ -287,15 +280,15 @@ async fn process(
             .collect::<Vec<_>>();
 
         let mut run_suggest = HashMap::new();
-        for (j, w) in words[0].iter().rev().enumerate() {
-            print!("[{:02}]: {} ", j, w);
+        for (j, w) in words[0].iter().enumerate() {
+            print!("[{:02}]: {} ", words[0].len() - j, w);
 
             if w.contains('?') {
                 if !run_suggest.contains_key(&i) {
                     let suggested = suggest_unknown(w, rec.letters.clone(), sub_path).await;
                     println!("=>\n    [",);
-                    for (k, word) in suggested.iter().enumerate() {
-                        println!("      [{:02} | {} ],", k, word);
+                    for (k, word) in suggested.iter().rev().enumerate() {
+                        println!("      [{:02}| | {} ],", suggested.len() - k, word);
                     }
                     print!("    ]");
 
@@ -304,7 +297,19 @@ async fn process(
             }
             println!("");
         }
-        println!("\n----------------------\n");
+
+        println!("\n=> [^]: '{}'", rec.longest);
+        if !subs.is_empty() {
+            println!("=> [h]: '{}'", subs.join(", "));
+        }
+
+        if !fake.is_empty() {
+            println!("=> [x]: '{}'", fake.join(", "));
+        }
+
+        println!("\n[-----------------------------]");
+        println!("[    ^^^ [RESULT {}/{}] ^^^     ]", &results.len() - i, &results.len());
+        println!("[-----------------------------]\n");
     }
 
     if !ignore.contains("_") {
@@ -319,7 +324,6 @@ async fn process(
 #[tokio::main]
 async fn main() {
     let args = Arguments::parse();
-    println!("{:#?}", &DATA_LOCAL.to_owned());
 
     let sublist_path = match args.sublist {
         Some(ref _path) => {
@@ -362,6 +366,8 @@ async fn main() {
             }
         }
     };
+
+    println!("");
 
     if args.interactive {
         println!("[--interactive]: running interactively ('>>q' to exit):");
