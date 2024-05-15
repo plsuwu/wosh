@@ -308,7 +308,7 @@ async fn process(
         }
 
         println!("\n[-----------------------------]");
-        println!("[    ^^^ [RESULT {}/{}] ^^^     ]", &results.len() - i, &results.len());
+        println!("[  ^^^ [RESULT {:03}/{:03}] ^^^   ]", &results.len() - i, &results.len());
         println!("[-----------------------------]\n");
     }
 
