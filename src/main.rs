@@ -1,7 +1,6 @@
 use clap::Parser;
 use csv::{ReaderBuilder, Trim};
-use fetch_sublist::get_sublist;
-use fetch_wordlist::get_wordlist;
+use fetch::get_list;
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -12,8 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::task;
 
-mod fetch_sublist;
-mod fetch_wordlist;
+mod fetch;
 
 lazy_static!(
     #[derive(Debug)]
@@ -71,7 +69,7 @@ async fn read_wordlist(path: &PathBuf) -> Result<Vec<Record>, Box<dyn Error>> {
     let file = match file_res {
         Ok(file) => file,
         Err(err) => match err.kind() {
-            ErrorKind::NotFound => match get_wordlist(&path).await {
+            ErrorKind::NotFound => match get_list(&path, "word").await {
                 Ok(fc) => {
                     println!("\n   => Fetch ok, returning.");
                     fc
@@ -107,7 +105,7 @@ async fn read_sublist(path: &PathBuf) -> Result<Vec<String>, Box<dyn Error>> {
     let file = match file_res {
         Ok(file) => file,
         Err(err) => match err.kind() {
-            ErrorKind::NotFound => match get_sublist(&path).await {
+            ErrorKind::NotFound => match get_list(&path, "sub").await {
                 Ok(fc) => {
                     println!("\n    => Fetch ok, returning.");
                     fc
@@ -232,7 +230,6 @@ async fn process(
     ignore: &str,
     spaces: usize,
 ) {
-
     println!("\n[-----------------------------]\n");
     let wordlist = Arc::new(read_wordlist(list_path).await.unwrap());
     let chunks = wordlist
@@ -308,7 +305,11 @@ async fn process(
         }
 
         println!("\n[-----------------------------]");
-        println!("[  ^^^ [RESULT {:03}/{:03}] ^^^   ]", &results.len() - i, &results.len());
+        println!(
+            "[  ^^^ [RESULT {:03}/{:03}] ^^^   ]",
+            &results.len() - i,
+            &results.len()
+        );
         println!("[-----------------------------]\n");
     }
 
@@ -325,6 +326,8 @@ async fn process(
 async fn main() {
     let args = Arguments::parse();
 
+    // this could be an iterator or use more pattern matching
+    // but i dont want to refactor it as of now
     let sublist_path = match args.sublist {
         Some(ref _path) => {
             let path_from_args: PathBuf = args.sublist.unwrap().into();

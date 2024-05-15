@@ -1,14 +1,20 @@
 use std::{
-    time::Duration,
     fs::File,
     io::{Error, Write},
     path::PathBuf,
+    time::Duration,
 };
 
-use crate::{DATA_LOCAL, SUBLIST_URL_GIT};
+use crate::{DATA_LOCAL, SUBLIST_URL_GIT, WORDLIST_URL_GIT};
 
-async fn fetch(path: PathBuf) -> Result<File, Error> {
-
+async fn fetch(path: PathBuf, list_name: String) -> Result<File, Error> {
+    let list_url = match list_name.as_str() {
+        "sub" => SUBLIST_URL_GIT.to_string(),
+        "word" => WORDLIST_URL_GIT.to_string(),
+        _ => panic!(
+            "[INTERNAL ERR]: Invalid list name passed to `fetch` function (fetch.rs)! You may have to download the required file yourself. Panicking..."
+        ),
+    };
     tokio::time::sleep(Duration::from_millis(250)).await;
 
     let wosh_base = DATA_LOCAL.join("wosh").to_owned();
@@ -16,7 +22,7 @@ async fn fetch(path: PathBuf) -> Result<File, Error> {
         std::fs::create_dir(&wosh_base).unwrap();
     }
     let mut writer = File::create(&path)?;
-    let body = reqwest::get(&*SUBLIST_URL_GIT)
+    let body = reqwest::get(&*list_url)
         .await
         .unwrap()
         .bytes()
@@ -40,20 +46,33 @@ fn confirm() -> std::io::Result<String> {
     }
 }
 
-pub async fn get_sublist(path: &PathBuf) -> Result<File, Error> {
+pub async fn get_list(path: &PathBuf, list_name: &str) -> Result<File, Error> {
+    let list_url = match list_name {
+        "sub" => SUBLIST_URL_GIT.to_string(),
+        "word" => WORDLIST_URL_GIT.to_string(),
+        _ => panic!(
+            "[INTERNAL ERR]: Invalid list name passed to `get_list` function (fetch.rs)! You may have to download the required file yourself. Panicking..."
+        ),
+    };
+
     eprintln!(
-        "[ERR]: Unable to find required sublists (default wordlists expected in directory '{}').",
-        DATA_LOCAL.join("wosh").to_owned().to_string_lossy().to_string()
+        "[ERR]: Unable to find a {}list (default lists expected in directory '{}').",
+        list_name,
+        DATA_LOCAL
+            .join("wosh")
+            .to_owned()
+            .to_string_lossy()
+            .to_string()
     );
     eprintln!(
         "[ERR]: I can download this automatically from url\n       => '{}'\n[ERR]: Continue? [Y/n]:",
-        &SUBLIST_URL_GIT.to_string()
+        &list_url.to_string()
     );
     match confirm() {
         Ok(res) => {
             let confirmed = Vec::from(["".to_string(), "y".to_string(), "yes".to_string()]);
             if !confirmed.contains(&res.trim().to_lowercase().to_owned()) {
-                println!("[ERR]: Exiting.\n[NOTE]: Try passing in a subtitution list filepath with '[-s | --sublist < /PATH/TO/FILE.txt > ]'.");
+                println!("[ERR]: Exiting.\n[NOTE]: You may be able to try passing in a file with '[ --{}list < /PATH/TO/FILE > ]'.", list_name);
                 std::process::exit(1);
             }
         }
@@ -63,9 +82,9 @@ pub async fn get_sublist(path: &PathBuf) -> Result<File, Error> {
     };
 
     let mut dot_counter = 0;
-    let future = tokio::task::spawn(fetch(path.to_path_buf()));
+    let future = tokio::task::spawn(fetch(path.to_path_buf(), list_name.to_owned()));
     println!(
-        "   => Writing to file (path: '{}'):",
+        "   => Writing to file (@ path: '{}'):",
         &path.to_string_lossy().to_string()
     );
     print!("     ");
