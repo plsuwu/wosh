@@ -1,27 +1,30 @@
 # Words on Stream "Helper"
 
-> because i am a litarate
+> Because I am a litarate
 
-## installation
+## Installation
 
-building from source is easiest with [rustup](https://rustup.rs/); it should just be a matter of cloning the repo
-and running `cargo install` to dump a binary into your `PATH`:
+Installation is likely easiest with cargo (e.g using [rustup](https://rustup.rs/)) - assuming `git` and `cargo`/`rustc` are installed, it should
+just be a matter of cloning this repo and compiling via `cargo install` to dump a binary into your `PATH`:
 
 ```bash
-# on linux (though should be cross-platform) (i haven't tested on windows)
+# platform agnostic
+
 git clone https://github.com/plsuwu/wosh
 cd wosh
 cargo install --path .
 ```
 
-## usage
+## Usage
 
-> note: output intended to be read bottom-to-top.
+> Note: The current version's output intended to be read bottom-to-top.
 
-the idea is that this is as quick and easy as possible to run; generally, you will only want to use the `-l`/`--letters` arg:
+The idea is that this should be quick and easy to run. Generally, you will only pass `-l`/`--letters` with the board's content:
 
 ```bash
-# pass letters with `-l`/`--letters` - any `[?]` on the board are replaced with `.`:
+# pass letters with '--letters'
+# replace any '[?]' with '.'
+
 [please@ruby]:[~] $ wosh -l hanla.ldz
 [ RESULT 1 OF 2 ]:
 
@@ -35,16 +38,19 @@ the idea is that this is as quick and easy as possible to run; generally, you wi
 [03]: eland
 
 # ...
+```
 
+I stole the 'main' csv wordlist from [a Reddit post](https://www.reddit.com/r/YouTubeGamers/comments/v0khwa/words_on_stream_dictionary/), and therefore isn't a complete dataset; 
+some words are replaced with `?`s.
+
+Any time a `?????` is found where there should be a word, the letters and word length are cross-referenced from a substitution list to suggest what this word might be:
+
+```
 [ RESULT 2 OF 2 ]:
 
 => [h]: 'b'
 => [x]: 'z'
 => [^]: 'handball'
-
-# the main wordlist isn't a complete dataset; any time a `???...` is found instead of a word,
-# the letters and word length are cross-referenced from a substitution list to suggest possible
-# words:
 
 [00]: handball
 [01]: ballad
@@ -58,7 +64,26 @@ the idea is that this is as quick and easy as possible to run; generally, you wi
 # ...
 ```
 
-- built on `clap` so `--help` can be passed to view a list of available commands
+A custom word or substitution list can be passed with `--wordlist` or `--sublist` respectively.
+
+The subsitution list takes a simple line-separated text file, but the wordlist is parsed using the following `Record` struct, and as such, the wordlist needs to be a distinct 
+comma-separated values file with the following column headers and data types:
+
+```rust
+// wordlen,longest,letters,spaces,wordlist
+// number, string, string, number, string
+
+struct Record {
+    wordlen: u32,
+    longest: String,
+    letters: String,
+    spaces: u32,
+    #[serde(rename(deserialize = "wordlist"))]
+    words: Vec<String>,
+}
+```
+
+There are a handful of other arguments that I won't go into - `wosh` is built on `clap`, so pass `--help` to view a list of available commands
 
 ```bash
 [please@ruby]:[~] $ wosh --help
@@ -69,17 +94,19 @@ Options:
   -I, --interactive                         # not currently implemented
   -i, --ignore <IGNORE>      [default: _]
       --spaces <SPACES>      [default: 0]   # not fully implemented
-  -w, --wordlist <WORDLIST>                 # defaults to '~/.local/share/wosh/wordlist'; asks to download if not present.
-  -s, --sublist <SUBLIST>                   # defaults to '~/.local/share/wosh/sublist'; asks to download if not present.
+  -w, --wordlist <WORDLIST>
+  -s, --sublist <SUBLIST>
   -t, --threads <THREADS>    split the wordlist into specified number of chunks to be processed in their own threads. [default: 15]
   -h, --help                 Print help
   -V, --version              Print version
 ```
 
-### initial run
+## Initial Run
 
-if no wordlist/sublist path is passed as an argument and cannot be found in the default location, `wosh` will prompt to download
-when the files are not found but required by the program:
+If no wordlist or sublist filepath is explicitly given to `wosh` as an argument, it will try to find a list in your operating system's default local data directory (see the 
+table below). If the lists also cannot be found in this default location, `wosh` will ask to download files from this repository. This will happen on-demand.
+
+> e.g:
 
 ```bash
 [please@ruby]:[~] $ wosh -l asdf...
@@ -92,37 +119,13 @@ y
    => Writing to file (path: '/home/please/.local/share/wosh/wordlist'):
       .
    => Fetch ok, returning.
-[ RESULT 1 OF 15 ]:
-
-=> [h]: 'c, e, r'
-=> [x]: 'd, f'
-=> [^]: 'acres'
-
-[00]: scare
 # ...
 ```
 
-> this also goes for the sublist:
+|**OS** |**'Local Data' directory** |
+|--- |--- |
+|Linux |`$XDG_DATA_HOME` _or_ `$HOME/.local/share/wosh/` |
+|MacOS |`$HOME/Library/Application Support/wosh/` |
+|Windows |`%LOCALAPPDATA%\wosh\` |
 
-```bash
-# ...
-[ RESULT 2 OF 15 ]:
-
-=> [h]: 'b, e, r'
-=> [x]: 's, f'
-=> [^]: 'bread'
-
-[ERR]: Unable to find required sublists (default wordlists expected in directory '/home/please/.local/share/wosh').
-[ERR]: I can download this automatically from url
-       => 'https://raw.githubusercontent.com/plsuwu/wosh/master/sublist'
-[ERR]: Continue? [Y/n]:
-y
-[00]: ?????    => Writing to file (path: '/home/please/.local/share/wosh/sublist'):
-       .
-    => Fetch ok, returning.
-=>
-    [
-      [00 | ardeb ],
-# ...
-```
-
+> [path stuff is handled by `dirs`](https://crates.io/crates/dirs)
