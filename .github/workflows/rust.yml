@@ -1,8 +1,7 @@
-name: Rust
+name: wosh-multi-builder
 
 on:
-  push:
-    branches: [ "master", "plsuwu-patch-1" ]
+  workflow_dispatch:
     
 env:
   CARGO_TERM_COLOR: always
@@ -20,15 +19,13 @@ jobs:
       - name: build
         
         run: |
-          cargo build --verbose --release
+          cargo build --release
 
       - uses: actions/upload-artifact@v4.3.3
         with:
-          # Artifact nam e
-          name: wosh-pre-${{ matrix.os }}
-          # A file, directory or wildcard pattern that describes what to upload
-          path: rel/*.zip
-          # The desired behavior if no files are found using the provided path.
+          # Artifact name
+          name: wosh*
+          path: target/release/
           retention-days: 1
           
   release:
@@ -47,8 +44,7 @@ jobs:
           prerelease: true
           title: "prerel build"
           files: |
-            wosh-pre-windows-latest/*.zip
-            wosh-pre-macos-latest/*.zip
-            wosh-pre-ubuntu-latest/*.zip
+            wosh.exe
+            wosh
           
           
