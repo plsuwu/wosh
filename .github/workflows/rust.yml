@@ -19,17 +19,38 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - name: Build
+      - name: build
         
         run: |
           cargo build --verbose --release
 
       - uses: actions/upload-artifact@v4.3.3
         with:
-          # Artifact name
+          # Artifact nam e
           name: wosh-pre-${{ matrix.os }}
           # A file, directory or wildcard pattern that describes what to upload
           path: rel/*.zip
           # The desired behavior if no files are found using the provided path.
           retention-days: 1
+          
+  release:
+    name: "prerel"
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v3
+      - name: Display fetched artifacts
+        run: ls -R
+      - name: Emit a Github Release
+        uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: "latest"
+          prerelease: true
+          title: "prerel build"
+          files: |
+            wosh-pre-windows-latest/*.zip
+            wosh-pre-macos-latest/*.zip
+            wosh-pre-ubuntu-latest/*.zip
+          
           
