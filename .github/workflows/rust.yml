@@ -13,23 +13,23 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [windows-latest]
+        os: [ubuntu-lastest, macos-latest, windows-latest]
         
     runs-on: ${{ matrix.os }}
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Build
-      run: |
-        cargo build --verbose --release
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          cargo build --verbose --release
 
-    - uses: actions/upload-artifact@v4.3.3
-    - name: upload build artifacts
-      with:
-        # Artifact name
-        name: wosh-pre-${{ matrix.os }}
-        # A file, directory or wildcard pattern that describes what to upload
-        path: rel/*.zip
-        # The desired behavior if no files are found using the provided path.
-        retention-days: 1
+      - uses: actions/upload-artifact@v4.3.3
+      - name: upload build artifacts
+        with:
+          # Artifact name
+          name: wosh-pre-${{ matrix.os }}
+          # A file, directory or wildcard pattern that describes what to upload
+          path: rel/*.zip
+          # The desired behavior if no files are found using the provided path.
+          retention-days: 1
           
