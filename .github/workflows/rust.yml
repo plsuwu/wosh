@@ -1,9 +1,8 @@
 name: wosh-multi-builder
 
 on:
-  push:
-    branches: [ "master", "plsuwu-patch-1" ]
-    
+  workflow_dispatch:
+  
 env:
   CARGO_TERM_COLOR: always
 
