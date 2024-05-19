@@ -1,0 +1,33 @@
+name: wosh-multi-builder
+
+on:
+  push:
+    branches: [ "master", "plsuwu-patch-1" ]
+    
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-lastest, macos-latest, windows-latest]
+        
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: build
+        
+        run: |
+          cargo build --release
+
+      - uses: actions/upload-artifact@v4.3.3
+        with:
+          # Artifact name
+          name: wosh-pre-${{ matrix.os }}
+          path: target/release/wosh*
+          retention-days: 1
+
+          
+          
