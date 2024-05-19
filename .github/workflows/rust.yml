@@ -22,8 +22,8 @@ jobs:
     - name: Build
       run: cargo build --verbose --release
 
-    - name: upload build artifact
     - uses: actions/upload-artifact@v4.3.3
+    - name: upload build artifacts
       with:
         # Artifact name
         name: wosh-pre-${{ matrix.os }}
