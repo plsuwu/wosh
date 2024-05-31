@@ -178,7 +178,7 @@ fn filtered(
             })
         })
         .cloned()
-        .collect::<Vec<_>>(); // idk how to avoid cloning with some insane lifetime wrangling so we
+        .collect::<Vec<_>>(); // idk how to avoid cloning without going through hellish lifetime wrangling so we
                               // just clone for my sanity
 
     return found;
