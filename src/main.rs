@@ -3,6 +3,7 @@ use csv::{ReaderBuilder, Trim};
 use fetch::get_list;
 use lazy_static::lazy_static;
 use serde::Deserialize;
+use tokio::sync::Mutex;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
@@ -74,7 +75,7 @@ async fn read_wordlist(path: &PathBuf) -> Result<Vec<Record>, Box<dyn Error>> {
                     println!("\n   => Fetch ok, returning.");
                     fc
                 }
-                Err(e) => panic!("[ERR]: No wordlist arg found and unable to initialize a default wordlist: \n{:#?}", e),
+                Err(e) => panic!("[ERR]: Unable to initialize a wordlist (no wordlist supplied, default wordlist unavailable): \n{:#?}", e),
             },
             unhandled => {
                 panic!(
@@ -110,7 +111,7 @@ async fn read_sublist(path: &PathBuf) -> Result<Vec<String>, Box<dyn Error>> {
                     println!("\n    => Fetch ok, returning.");
                     fc
                 }
-                Err(e) => panic!("[ERR]: No substitution arg found and unable to initialize a default substitution list: {:#?}", e),
+                Err(e) => panic!("[ERR]: Unable to initialize a sublist (no sublist supplied, default sublist unavailable): {:#?}", e),
             },
             unhandled => {
                 panic!(
@@ -176,10 +177,8 @@ fn filtered(
                     }
                 }
             })
-        })
-        .cloned()
-        .collect::<Vec<_>>(); // idk how to avoid cloning with some insane lifetime wrangling so we
-                              // just clone for my sanity
+        }).cloned()
+        .collect::<Vec<_>>();
 
     return found;
 }
@@ -222,17 +221,11 @@ async fn suggest_unknown(unknown: &str, letters: String, sub_path: &PathBuf) -> 
     return found;
 }
 
-async fn process(
-    list_path: &PathBuf,
-    sub_path: &PathBuf,
-    chunk_size: usize,
-    letters: &str,
-    ignore: &str,
-    spaces: usize,
-) {
-    println!("\n[-----------------------------]\n");
-    let wordlist = Arc::new(read_wordlist(list_path).await.unwrap());
-    let chunks = wordlist
+async fn process(list_path: &PathBuf, sub_path: &PathBuf, chunk_size: usize, letters: &str, ignore: &str, spaces: usize) {
+    println!("\n[-----------------------------]\n"); // result separator
+                                                     //
+    let wordlist = Mutex::new(Arc::new(read_wordlist(list_path).await.unwrap()));
+    let chunks = wordlist.lock().await
         .chunks(chunk_size)
         .map(|chunk| Arc::new(chunk.to_vec()))
         .collect::<Vec<_>>();
@@ -273,23 +266,25 @@ async fn process(
         let mut words: Vec<&str> = rec.words.iter().map(|s| &**s).collect();
         let words = words
             .iter_mut()
-            .map(|s| s.split_whitespace().collect::<Vec<_>>())
+            .map(|s| {
+                s.split_whitespace().collect::<Vec<_>>()
+            }).rev()
             .collect::<Vec<_>>();
 
         let mut run_suggest = HashMap::new();
         for (j, w) in words[0].iter().enumerate() {
             print!("[{:02}]: {} ", words[0].len() - j, w);
-
             if w.contains('?') {
-                if !run_suggest.contains_key(&i) {
+                if !run_suggest.contains_key(&w.len()) {
                     let suggested = suggest_unknown(w, rec.letters.clone(), sub_path).await;
-                    println!("=>\n    [",);
+                    println!("=> [",);
                     for (k, word) in suggested.iter().rev().enumerate() {
-                        println!("      [{:02}| | {} ],", suggested.len() - k, word);
+                        println!("    [{:02}| {} ],", suggested.len() - k, word);
                     }
-                    print!("    ]");
-
-                    run_suggest.insert(i, w);
+                    run_suggest.insert(w.len(), words[0].len() - j);
+                } else {
+                    let (_, val) = run_suggest.get_key_value(&w.len()).unwrap();
+                    print!("(as per [^{}])", val);
                 }
             }
             println!("");
@@ -343,7 +338,7 @@ async fn main() {
             match default_initialized.try_exists() {
                 Ok(_) => SUBLIST_DEFAULT.to_path_buf(),
                 Err(e) => {
-                    panic!("[ERR]: Unable to create a default subslist: {:#?}", e);
+                    panic!("[ERR]: Unable to create a default sublist: {:#?}", e);
                 }
             }
         }
@@ -372,13 +367,14 @@ async fn main() {
 
     println!("");
 
+    // not working + cant really be bothered
     if args.interactive {
-        println!("[--interactive]: running interactively ('>>q' to exit):");
+        println!("[--interactive]: running interactively ('\\q' to exit):");
         loop {
             let mut input = String::new();
             stdin().read_to_string(&mut input).unwrap();
 
-            if input == ">>q" {
+            if input == "\\q" {
                 break;
             }
 

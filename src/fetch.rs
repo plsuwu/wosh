@@ -15,7 +15,7 @@ async fn fetch(path: PathBuf, list_name: String) -> Result<File, Error> {
             "[INTERNAL ERR]: Invalid list name passed to `fetch` function (fetch.rs)! You may have to download the required file yourself. Panicking..."
         ),
     };
-    tokio::time::sleep(Duration::from_millis(250)).await;
+    tokio::time::sleep(Duration::from_millis(250)).await; // literally just allow some time to give feedback
 
     let wosh_base = DATA_LOCAL.join("wosh").to_owned();
     if !wosh_base.is_dir() {
